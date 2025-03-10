@@ -36,7 +36,7 @@ def run(args):
         if model_str == "cnn":
             if args.dataset[:5] == "mnist":
                 args.model = FedAvgCNN(in_features=1, num_classes=args.num_classes, dim=1024).to(args.device)
-            elif args.dataset[:5] == "Cifar":
+            elif args.dataset[:5] == "cifar":
                 args.model = FedAvgCNN(in_features=3, num_classes=args.num_classes, dim=1600).to(args.device)
             else:
                 args.model = FedAvgCNN(in_features=3, num_classes=args.num_classes, dim=10816).to(args.device)
@@ -60,7 +60,7 @@ def run(args):
         else:
             raise NotImplementedError
             
-        server.train()
+        server.train(args)
         
         # torch.cuda.empty_cache()
 
@@ -108,7 +108,7 @@ if __name__ == "__main__":
     parser.add_argument('-lam', "--lamda", type=float, default=0.0)
 
     args = parser.parse_args()
-
+    print("dp", args.difference_privacy)
     os.environ["CUDA_VISIBLE_DEVICES"] = args.device_id
     # torch.cuda.set_device(int(args.device_id))
 

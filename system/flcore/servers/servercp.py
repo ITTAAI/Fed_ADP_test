@@ -5,6 +5,7 @@ import time
 from flcore.clients.clientcp import *
 from utils.data_utils import read_client_data
 from threading import Thread
+import os
 
 
 class FedCP:
@@ -79,12 +80,12 @@ class FedCP:
         for w, client_model in zip(self.uploaded_weights, self.uploaded_models):
             self.add_parameters(w, client_model)
 
-    def test_metrics(self):
+    def test_metrics_before(self):
         num_samples = []
         tot_correct = []
         tot_auc = []
         for c in self.clients:
-            ct, ns, auc = c.test_metrics()
+            ct, ns, auc = c.test_metrics_before()
             print(f'Client {c.id}: Acc: {ct*1.0/ns}, AUC: {auc}')
             tot_correct.append(ct*1.0)
             tot_auc.append(auc*ns)
@@ -93,9 +94,15 @@ class FedCP:
         ids = [c.id for c in self.clients]
 
         return ids, num_samples, tot_correct, tot_auc
+    def test_metrics_after(self):
 
+        for c in self.clients:
+            c.test_metrics_after()
+
+
+        return
     def evaluate(self, acc=None):
-        stats = self.test_metrics()
+        stats = self.test_metrics_before()
 
         test_acc = sum(stats[2])*1.0 / sum(stats[1])
         test_auc = sum(stats[3])*1.0 / sum(stats[1])
@@ -109,21 +116,33 @@ class FedCP:
         print("Averaged Test AUC: {:.4f}".format(test_auc))
 
 
-    def train(self):
+    def train(self,args):
+        result_dir = "results"
+        os.makedirs(result_dir, exist_ok=True)
+        if args.difference_privacy:
+            filename = f"results_{args.dataset}_{args.global_rounds}_{args.local_learning_rate:.4f}_dp.txt"
+        else:
+            filename = f"results_{args.dataset}_{args.global_rounds}_{args.local_learning_rate:.4f}.txt"
+        file_path = os.path.join(result_dir, filename)
         for i in range(self.global_rounds+1):
             s_t = time.time()
             self.selected_clients = self.select_clients()
 
+
             if i%self.eval_gap == 0:
                 print(f"\n-------------Round number: {i}-------------")
                 print("\nEvaluate before local training")
+                self.evaluate()
+
+                with open(file_path, "a") as f:
+                    f.write(f"Round {i}: ACC = {self.rs_test_acc[-1]:.4f}\n")
 
 
             for client in self.selected_clients:
                 client.round= i
                 client.train_cs_model()
 
-            self.evaluate()
+            self.test_metrics_after()
             self.receive_models()
             self.aggregate_parameters()
             self.send_models()
