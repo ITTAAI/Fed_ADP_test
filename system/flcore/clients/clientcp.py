@@ -240,13 +240,48 @@ class clientCP:
 
         return
 
-    def train_cs_model(self):
+    def train_cs_model(self,round,args):
 
         testloader = self.load_test_data()
 
         trainloader = self.load_train_data()
-        self.model.train()
 
+        with torch.enable_grad():
+            for i, (x, y) in enumerate(testloader):
+                if type(x) == type([]):
+                    x[0] = x[0].to(self.device)
+                else:
+                    x = x.to(self.device)
+                y = y.to(self.device)
+                output = self.model(x)
+                loss = self.loss(output, y)
+                self.opt.zero_grad()
+                loss.backward()
+                break
+            self.param_diff = {}
+            for name, p in self.model.named_parameters():
+                if p.grad is not None:
+                    grad = p.grad.data
+                    # 根据梯度下降更新规则，参数更新值为 -learning_rate * grad
+                    self.param_diff[name] = -self.learning_rate * grad
+            # if self.round % 50 == 0 and self.round > 1:
+            #     self.get_module_diff_norm(iftest=True, visualize=True)
+            grad_norm_head = self.get_module_grad_norm(self.model.head)  # global model
+            grad_norm_feat = self.get_module_grad_norm(self.model.feature_extractor)
+
+            record_dict = {
+                "round": self.round,
+                "grad_norm_head": grad_norm_head,
+                "grad_norm_feat": grad_norm_feat,
+            }
+            with open(self.filepath + "testbefore", "a") as f:
+                f.write(str(record_dict) + "\n")
+
+
+        self.model.train()
+        self.inital_pra = {name: param.clone().detach() for name, param in self.model.named_parameters()}
+        self.inital_pra_dp = {name: param.clone().detach() for name, param in
+                              self.model.feature_extractor.named_parameters()}
         for _ in range(self.local_steps):
             self.pm_train = []
             for i, (x, y) in enumerate(trainloader):
@@ -260,11 +295,8 @@ class clientCP:
                 self.opt.zero_grad()
                 loss.backward()
                 self.opt.step()
-                break
 
-        self.inital_pra = {name: param.clone().detach() for name, param in self.model.named_parameters()}
-        self.inital_pra_dp = {name: param.clone().detach() for name, param in
-                              self.model.feature_extractor.named_parameters()}
+
         for _ in range(self.local_steps):
             self.pm_train = []
             for i, (x, y) in enumerate(trainloader):
@@ -351,27 +383,38 @@ class clientCP:
                     param_diff[full_name] = (param - self.inital_pra_dp[full_name]).detach()
 
             for full_name, diff in param_diff.items():
+                # 这两个：
+                norm_train = torch.norm(diff.abs())
+                norm_test = torch.norm(self.param_diff_test["feature_extractor." + full_name].abs())
                 # 1) 计算 25% 分位数作为裁剪阈值
-                threshold = torch.quantile(diff.abs().view(-1), 0.99)
-                threshold_test= torch.quantile(self.param_diff_test["feature_extractor."+full_name].abs().view(-1), 0.01)
-                clip_value= max(0.03,torch.quantile(diff.abs().view(-1), 0.75))
-                clip_value=torch.quantile(diff.abs().view(-1), 0.75)
+                threshold = torch.quantile(diff.abs().view(-1), 0.25)
+                threshold_test= torch.quantile(self.param_diff_test["feature_extractor."+full_name].abs().view(-1), 0.1)
+                clip_value= max(0.05,torch.quantile(diff.abs().view(-1), 0.85))
                 mask = (diff.abs() <= threshold) & (self.param_diff_test["feature_extractor." + full_name].abs() >= threshold_test)
 
                 # print(f"Layer {full_name}: {mask.sum().item()} / {mask.numel()} parameters masked.")
                 masked_diff = diff[mask]
 
                 norm = torch.norm(diff)
-                if norm > clip_value:
-                    diff = diff / norm * clip_value
+                # if norm > clip_value:
+                #     diff = diff / norm * clip_value
 
 
                 # -- (b) 加噪 --
-                noise_std = 20*clip_value*torch.sqrt(
-                    torch.tensor(2.0) * torch.log(torch.tensor(1.25 / delta)))/(len(trainloader)*epsilon)
-                noise = torch.normal(mean=0, std=noise_std, size=masked_diff.shape).to(diff.device)
+                # noise_std = 40*clip_value*torch.sqrt(
+                #     torch.tensor(2.0) * torch.log(torch.tensor(1.25 / delta)))/(len(trainloader)*epsilon)
+                d = mask.sum().item()
+                # print(f"Layer {full_name}: {d} / {mask.numel()} parameters masked.")
+                if d == 0:
+                    noise_std_estimate = torch.tensor(0.0, device=diff.device)
+                else:
+                    diff_sq =3* torch.clamp(norm_test ** 2 - norm_train ** 2, min=1e-8)  # 防止负值
+                    noise_std_estimate = torch.sqrt(diff_sq / d)
+                noise = torch.normal(mean=0, std=noise_std_estimate, size=masked_diff.shape).to(diff.device)
                 masked_diff = masked_diff + noise
-
+                norm_masked_noisy = torch.norm(masked_diff.abs())
+                print(
+                    f"[{full_name}] noise_std={noise_std_estimate.item():.6f} | norm_noisy={norm_masked_noisy.item():.4f} vs norm_test={norm_test.item():.4f}")
                 # 4) 写回原来的 diff
                 diff[mask] = masked_diff
                 param_diff[full_name] = diff
@@ -419,7 +462,7 @@ class clientCP:
             import os
             save_dir = "pretrain"
             os.makedirs(save_dir, exist_ok=True)  # Create folder if it doesn't exist
-            filename = f"results_{args.dataset}_client{self.id}_{args.global_rounds}_{args.local_learning_rate:.4f}_{args.difference_privacy_layer}_{args.difference_privacy_layer2}.pt"
+            filename = f"results_{args.dataset}_client{self.id}_{args.global_rounds}_{args.local_learning_rate:.4f}.pt"
             save_path = os.path.join(save_dir, filename)
             torch.save(self.model.state_dict(), save_path)
             print(f"Model saved to {save_path}")

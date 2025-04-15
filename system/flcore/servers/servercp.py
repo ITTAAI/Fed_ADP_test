@@ -84,12 +84,20 @@ class FedCP:
         num_samples = []
         tot_correct = []
         tot_auc = []
+        result_dir = "results"
+        os.makedirs(result_dir, exist_ok=True)
         for c in self.clients:
             ct, ns, auc = c.test_metrics_before()
             print(f'Client {c.id}: Acc: {ct*1.0/ns}, AUC: {auc}')
             tot_correct.append(ct*1.0)
             tot_auc.append(auc*ns)
             num_samples.append(ns)
+            filename=f"results_{self.dataset}_{c.id}.txt"
+            file_path = os.path.join(result_dir, filename)
+            with open(file_path, "a") as f:
+                f.write(f"Round {c.round}: ACC = {ct*1.0/ns:.4f}\n")
+
+
 
         ids = [c.id for c in self.clients]
 
@@ -140,7 +148,7 @@ class FedCP:
 
             for client in self.selected_clients:
                 client.round= i
-                client.train_cs_model()
+                client.train_cs_model(i,args)
 
             self.test_metrics_after()
             self.receive_models()
@@ -170,3 +178,12 @@ class FedCP:
             self.uploaded_weights.append(client.train_samples / active_train_samples)
             self.uploaded_ids.append(client.id)
             self.uploaded_models.append(client.model)
+
+    def train_global(self):
+        globel_client=clientCP(args,
+                            id=20,
+                            train_samples=len(train_data),
+                            test_samples=len(test_data))
+
+
+
