@@ -114,7 +114,7 @@ def plot_bubble_distribution(distribution_matrix,
 #######################
 if __name__ == "__main__":
     dataset_name = "cifar-10-normal"  # 数据集名称
-    num_clients = 20      # 客户端数
+    num_clients = 21      # 客户端数
     num_classes = 10     # 示例: 这里演示200类(你的图看起来像200行),
                           # 如果是CIFAR-10则 num_classes=10。
                           # 或者你想绘制 200, 256 之类都行。

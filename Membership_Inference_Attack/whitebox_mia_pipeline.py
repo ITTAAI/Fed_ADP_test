@@ -82,9 +82,9 @@ def whitebox_membership_inference_attack_pipeline(client_files, target_model, ta
         data_out = TensorDataset(g1, g2, g3, g4, softmax, label_out)
 
         # ========== 构造 DataLoader ==========
-        data_all = DataLoader(ConcatDataset([data_in, data_out]), batch_size=BATCH_SIZE, shuffle=False)
-        data_tps = DataLoader(data_in, batch_size=BATCH_SIZE, shuffle=False)
-        data_fps = DataLoader(data_out, batch_size=BATCH_SIZE, shuffle=False)
+        data_all = DataLoader(ConcatDataset([data_in, data_out]), batch_size=BATCH_SIZE, shuffle=True)
+        data_tps = DataLoader(data_in, batch_size=BATCH_SIZE, shuffle=True)
+        data_fps = DataLoader(data_out, batch_size=BATCH_SIZE, shuffle=True)
 
         # ========== 模型评估 ==========
         def eval_loader(loader):
@@ -121,42 +121,51 @@ def whitebox_membership_inference_attack_pipeline(client_files, target_model, ta
 # ============================
 # 4. 可视化模块
 # ============================
-def plot_attack_results_per_client(results_by_part, part_names):
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+
+import matplotlib
+matplotlib.use('Agg')                 # 服务器 / 无 GUI
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from pathlib import Path
+
+def plot_attack_results_per_client(results_by_part, part_names,
+                                   save_root='view'):
     """
-    每个 client 单独绘图。
-    :param results_by_part: List of list，每一部分模型的所有 client 结果列表
-    :param part_names: 与 results_by_part 对应的模型部分名称列表
+    results_by_part: list (part) -> list (client) -> list (label) -> dict
     """
-    for part_idx, (results, part_name) in enumerate(zip(results_by_part, part_names)):
-        for client_idx, client_result in enumerate(results):
-            attack_acc = client_result['attack_acc']
-            TPS_acc = client_result['TPS_acc']
-            FPS_error = client_result['FPS_error']
+    save_root = Path(save_root)
+    save_root.mkdir(exist_ok=True)
 
-            plt.figure(figsize=(6, 4))
-            x_axis = ['Attack Acc', 'TPS Acc', 'FPS Error']
-            y_values = [attack_acc, TPS_acc, FPS_error]
-            markers = ['o', 's', '^']
-            linestyles = ['-', '--', '-.']
+    for part_idx, (part_results, part_name) in enumerate(zip(results_by_part, part_names)):
+        for client_idx, label_results in enumerate(part_results):
 
-            for i in range(3):
-                plt.plot([i], [y_values[i]],
-                         marker=markers[i],
-                         linestyle=linestyles[i],
-                         color='black',
-                         label=x_axis[i])
+            # --------- 收集 10 个 label 的数值 ---------
+            attack_vals = [r['attack_acc'] for r in label_results]
+            tps_vals    = [r['TPS_acc']    for r in label_results]
+            fps_vals    = [r['FPS_error']  for r in label_results]
+            labels_x    = list(range(len(label_results)))      # 0…9
 
-            plt.xticks(range(3), x_axis)
-            plt.ylim(0.0, 1.05)
-            plt.ylabel("Accuracy / Error")
-            plt.title(f"{part_name} - Client {client_idx}")
-            plt.grid(True)
+            # --------- 一张图绘三条折线 ---------
+            fig, ax = plt.subplots(figsize=(5, 3.5))
+            ax.plot(labels_x, attack_vals, marker='o', linestyle='-',
+                    label='Attack Acc')
+            ax.plot(labels_x, tps_vals,    marker='s', linestyle='--',
+                    label='TPS Acc')
+            ax.plot(labels_x, fps_vals,    marker='^', linestyle='-.',
+                    label='FPS Error')
 
-            # 图例
-            line_handles = [Line2D([0], [0], color='black', lw=2, linestyle=linestyles[i], marker=markers[i])
-                            for i in range(3)]
-            plt.legend(line_handles, ['Attack Accuracy', 'TPS Accuracy', 'FPS Error'], loc='best')
+            ax.set_xticks(labels_x)
+            ax.set_xlabel("Target Label")
+            ax.set_ylim(0, 1.05)
+            ax.set_ylabel("Accuracy / Error")
+            ax.set_title(f"{part_name}  |  Client {client_idx}")
+            ax.grid(True)
+            ax.legend(loc='best')
+            fig.tight_layout()
 
-            plt.tight_layout()
-            plt.show()
+            out = save_root / f"{part_name}_c{client_idx}.png"
+            fig.savefig(out, dpi=200)
+            plt.close(fig)
 

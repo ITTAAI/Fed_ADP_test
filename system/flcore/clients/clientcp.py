@@ -20,7 +20,9 @@ class clientCP:
         self.dp = args.difference_privacy
         self.num_classes = args.num_classes
         self.train_samples = train_samples
+        print(f"Client {self.id} has {self.train_samples} training samples.")
         self.test_samples = test_samples
+
         self.batch_size = args.batch_size
         self.learning_rate = args.local_learning_rate
         self.local_steps = args.local_steps
@@ -28,6 +30,8 @@ class clientCP:
         self.loss = nn.CrossEntropyLoss()
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.learning_rate)
         self.round = 0
+        self.public_data_loader = DataLoader(read_client_data(self.dataset, args.num_clients, is_train=False), self.batch_size,
+                                      drop_last=True, shuffle=False)
         self.param_diff = {}
         self.inital_pra = {}
         if self.dp:
@@ -246,6 +250,7 @@ class clientCP:
 
         trainloader = self.load_train_data()
 
+
         with torch.enable_grad():
             for i, (x, y) in enumerate(testloader):
                 if type(x) == type([]):
@@ -387,8 +392,8 @@ class clientCP:
                 norm_train = torch.norm(diff.abs())
                 norm_test = torch.norm(self.param_diff_test["feature_extractor." + full_name].abs())
                 # 1) 计算 25% 分位数作为裁剪阈值
-                threshold = torch.quantile(diff.abs().view(-1), 0.25)
-                threshold_test= torch.quantile(self.param_diff_test["feature_extractor."+full_name].abs().view(-1), 0.1)
+                threshold = torch.quantile(diff.abs().view(-1), 0.2)
+                threshold_test= torch.quantile(self.param_diff_test["feature_extractor."+full_name].abs().view(-1), 0.5)
                 clip_value= max(0.05,torch.quantile(diff.abs().view(-1), 0.85))
                 mask = (diff.abs() <= threshold) & (self.param_diff_test["feature_extractor." + full_name].abs() >= threshold_test)
 
@@ -401,15 +406,8 @@ class clientCP:
 
 
                 # -- (b) 加噪 --
-                # noise_std = 40*clip_value*torch.sqrt(
-                #     torch.tensor(2.0) * torch.log(torch.tensor(1.25 / delta)))/(len(trainloader)*epsilon)
-                d = mask.sum().item()
-                # print(f"Layer {full_name}: {d} / {mask.numel()} parameters masked.")
-                if d == 0:
-                    noise_std_estimate = torch.tensor(0.0, device=diff.device)
-                else:
-                    diff_sq =3* torch.clamp(norm_test ** 2 - norm_train ** 2, min=1e-8)  # 防止负值
-                    noise_std_estimate = torch.sqrt(diff_sq / d)
+                noise_std_estimate = 20*clip_value*torch.sqrt(
+                    torch.tensor(2.0) * torch.log(torch.tensor(1.25 / delta)))/(len(trainloader)*epsilon)
                 noise = torch.normal(mean=0, std=noise_std_estimate, size=masked_diff.shape).to(diff.device)
                 masked_diff = masked_diff + noise
                 norm_masked_noisy = torch.norm(masked_diff.abs())
@@ -427,6 +425,20 @@ class clientCP:
                 param.data = self.inital_pra_dp[name] + param_diff[name]
 
 
+
+        for _ in range(self.local_steps):
+            self.pm_train = []
+            for i, (x, y) in enumerate(self.public_data_loader):
+                if type(x) == type([]):
+                    x[0] = x[0].to(self.device)
+                else:
+                    x = x.to(self.device)
+                y = y.to(self.device)
+                output = self.model(x)
+                loss = self.loss(output, y)
+                self.opt.zero_grad()
+                loss.backward()
+                self.opt.step()
 
         with torch.enable_grad():
             for i, (x, y) in enumerate(trainloader):

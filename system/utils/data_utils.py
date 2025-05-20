@@ -45,6 +45,7 @@ def read_client_data(dataset, idx, is_train=True):
 
 
 def read_client_data_text(dataset, idx, is_train=True):
+
     if is_train:
         train_data = read_data(dataset, idx, is_train)
         X_train, X_train_lens = list(zip(*train_data['x']))
