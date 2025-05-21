@@ -426,19 +426,19 @@ class clientCP:
 
 
 
-        for _ in range(self.local_steps):
-            self.pm_train = []
-            for i, (x, y) in enumerate(self.public_data_loader):
-                if type(x) == type([]):
-                    x[0] = x[0].to(self.device)
-                else:
-                    x = x.to(self.device)
-                y = y.to(self.device)
-                output = self.model(x)
-                loss = self.loss(output, y)
-                self.opt.zero_grad()
-                loss.backward()
-                self.opt.step()
+        # for _ in range(self.local_steps):
+        #     self.pm_train = []
+        #     for i, (x, y) in enumerate(self.public_data_loader):
+        #         if type(x) == type([]):
+        #             x[0] = x[0].to(self.device)
+        #         else:
+        #             x = x.to(self.device)
+        #         y = y.to(self.device)
+        #         output = self.model(x)
+        #         loss = self.loss(output, y)
+        #         self.opt.zero_grad()
+        #         loss.backward()
+        #         self.opt.step()
 
         with torch.enable_grad():
             for i, (x, y) in enumerate(trainloader):
