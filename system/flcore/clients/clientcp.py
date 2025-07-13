@@ -9,7 +9,7 @@ from sklearn import metrics
 from utils.data_utils import read_client_data
 import os
 import matplotlib.pyplot as plt
-
+# from Membership_Inference_Attack import *
 
 class clientCP:
     def __init__(self, args, id, train_samples, test_samples, **kwargs):
@@ -30,18 +30,28 @@ class clientCP:
         self.loss = nn.CrossEntropyLoss()
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.learning_rate)
         self.round = 0
-        self.public_data_loader = DataLoader(read_client_data(self.dataset, args.num_clients, is_train=False), self.batch_size,
-                                      drop_last=True, shuffle=False)
+        # self.public_data_loader = DataLoader(read_client_data(self.dataset, args.num_clients, is_train=False), self.batch_size,
+        #                               drop_last=True, shuffle=False)
+        log_root = "logs"
         self.param_diff = {}
         self.inital_pra = {}
         if self.dp:
-            result_dir =f"{self.dataset}_gradient_log_dp"
+            sub =f"{self.dataset}_gradient_log_dp"
         else:
-            result_dir = f"{self.dataset}_gradient_log"
+            sub = f"{self.dataset}_gradient_log"
+        result_dir = os.path.join(log_root, sub)
         os.makedirs(result_dir, exist_ok=True)
         filename = f"gradient_log_client{self.id}_{args.dataset}_{args.global_rounds}_{args.local_learning_rate:.4f}.txt"
 
         self.filepath = os.path.join(result_dir, filename)
+        with open(self.filepath + "testbefore", "a") as f:
+            pass
+        with open(self.filepath + "test", "a") as f:
+            pass
+        with open(self.filepath + "before", "a") as f:
+            pass
+        with open(self.filepath + "after", "a") as f:
+            pass
         self.lamda = args.lamda
 
         in_dim = list(args.model.head.parameters())[0].shape[1]
@@ -227,8 +237,8 @@ class clientCP:
                     grad = p.grad.data
                     # 根据梯度下降更新规则，参数更新值为 -learning_rate * grad
                     self.param_diff[name] = -self.learning_rate * grad
-            if self.round % 50 == 0 and self.round > 1:
-                self.get_module_diff_norm(iftest=True, visualize=True)
+            # if self.round % 50 == 0 and self.round > 1:
+            #     self.get_module_diff_norm(iftest=True, visualize=True)
             grad_norm_head = self.get_module_grad_norm(self.model.head)  # global model
             grad_norm_feat = self.get_module_grad_norm(self.model.feature_extractor)
 
@@ -245,6 +255,7 @@ class clientCP:
         return
 
     def train_cs_model(self,round,args):
+        print(round)
 
         testloader = self.load_test_data()
 
@@ -282,39 +293,33 @@ class clientCP:
             with open(self.filepath + "testbefore", "a") as f:
                 f.write(str(record_dict) + "\n")
 
-
+#
         self.model.train()
+
+        # 模型的真实训练部分
+        for _ in range(self.local_steps):
+            self.pm_train = []
+            for i, (x, y) in enumerate(trainloader):
+                if type(x) == type([]):
+                    x[0] = x[0].to(self.device)
+                else:
+                    x = x.to(self.device)
+                y = y.to(self.device)
+                output = self.model(x)
+                loss = self.loss(output, y)
+                self.opt.zero_grad()
+                loss.backward()
+                self.opt.step()
+
+
         self.inital_pra = {name: param.clone().detach() for name, param in self.model.named_parameters()}
         self.inital_pra_dp = {name: param.clone().detach() for name, param in
                               self.model.feature_extractor.named_parameters()}
-        for _ in range(self.local_steps):
-            self.pm_train = []
-            for i, (x, y) in enumerate(trainloader):
-                if type(x) == type([]):
-                    x[0] = x[0].to(self.device)
-                else:
-                    x = x.to(self.device)
-                y = y.to(self.device)
-                output = self.model(x)
-                loss = self.loss(output, y)
-                self.opt.zero_grad()
-                loss.backward()
-                self.opt.step()
+        if self.round % 50 == 0 and self.round>1 :
+            self.param_diff = {}
+            for name, param in self.model.named_parameters():
+                self.param_diff[name] = (param - self.inital_pra[name]).detach()
 
-
-        for _ in range(self.local_steps):
-            self.pm_train = []
-            for i, (x, y) in enumerate(trainloader):
-                if type(x) == type([]):
-                    x[0] = x[0].to(self.device)
-                else:
-                    x = x.to(self.device)
-                y = y.to(self.device)
-                output = self.model(x)
-                loss = self.loss(output, y)
-                self.opt.zero_grad()
-                loss.backward()
-                self.opt.step()
 
         with torch.enable_grad():
             for i, (x, y) in enumerate(trainloader):
@@ -326,7 +331,7 @@ class clientCP:
                 output = self.model(x)
                 loss = self.loss(output, y)
                 self.opt.zero_grad()
-                loss.backward()
+                loss.backward(retain_graph=True)
                 break
             self.param_diff = {}
             for name, p in self.model.named_parameters():
@@ -346,7 +351,31 @@ class clientCP:
             }
             with open(self.filepath + "before", "a") as f:
                 f.write(str(record_dict) + "\n")
-        # test 数据集测试
+
+            # …已有代码：loss.backward(); break
+            # ------------- 新增  -------------
+            # 只在每 10 轮估计一次二阶信息，避免过慢
+            if self.round % 10 == 0:
+                # 使用同一个 batch 的 loss，反向图已在内存
+                diag_H = hessian_diag_hutchinson(self.model, loss,
+                                                 num_samples=8)  # 8 次采样≈稳定
+                # 把张量列表对齐到参数名
+                hess_dict = {name: d for (name, _), d
+                             in zip(self.model.named_parameters(), diag_H)}
+
+                # ①  汇总所有 |Hii|，求 20% 分位作阈值
+                all_scores = torch.cat([h.flatten().abs() for h in diag_H])
+                thresh = torch.quantile(all_scores, 0.20).item()
+
+                # ②  建立 per-param 掩码：True = 不重要，可加噪
+                self.hess_mask = {n: (h.abs() <= thresh) for n, h in hess_dict.items()}
+            else:
+                # 轮次不满足时沿用旧掩码；首次训练前先给空 dict
+                if not hasattr(self, "hess_mask"):
+                    self.hess_mask = {}
+            # ------------- 结束新增 -------------
+
+        # for _ in range(self.local_steps+2):
         with torch.enable_grad():
             for x, y in testloader:
                 if type(x) == type([]):
@@ -367,24 +396,23 @@ class clientCP:
                     self.param_diff_test[name] = -self.learning_rate * grad
 
         # Clip and add noise for DP if enabled
-        clip_value=0.008
+        clip_value=0.1
         epsilon = 0.8
         delta = 1e-5
-        if self.round % 50 == 0 and self.round>1 :
-            self.param_diff = {}
-            for name, param in self.model.named_parameters():
-                self.param_diff[name] = (param - self.inital_pra[name]).detach()
 
-            self.get_module_diff_norm(visualize=True)
         if self.dp:
             param_diff = {}
-            modules = {'conv1': self.model.feature_extractor.conv1,
-                       'conv2': self.model.feature_extractor.conv2,
-                       'fc1': self.model.feature_extractor.fc1}
+            # modules = {'conv1': self.model.feature_extractor.conv1,
+            #            'conv2': self.model.feature_extractor.conv2,
+            #            'fc1': self.model.feature_extractor.fc1}
+            # modules = {'fc1': self.model.feature_extractor.fc1}
+            modules = {'': self.model.feature_extractor}
+
 
             for module_name, module in modules.items():
                 for name, param in module.named_parameters():
-                    full_name = f"{module_name}.{name}"  # 确保参数名称唯一
+                    full_name = f"{module_name}.{name}".lstrip('.')
+
                     param_diff[full_name] = (param - self.inital_pra_dp[full_name]).detach()
 
             for full_name, diff in param_diff.items():
@@ -393,52 +421,61 @@ class clientCP:
                 norm_test = torch.norm(self.param_diff_test["feature_extractor." + full_name].abs())
                 # 1) 计算 25% 分位数作为裁剪阈值
                 threshold = torch.quantile(diff.abs().view(-1), 0.2)
-                threshold_test= torch.quantile(self.param_diff_test["feature_extractor."+full_name].abs().view(-1), 0.5)
-                clip_value= max(0.05,torch.quantile(diff.abs().view(-1), 0.85))
-                mask = (diff.abs() <= threshold) & (self.param_diff_test["feature_extractor." + full_name].abs() >= threshold_test)
+                # threshold_test= torch.quantile(self.param_diff_test["feature_extractor."+full_name].abs().view(-1), 0.5)
+                # mask = (diff.abs() <= threshold) & (self.param_diff_test["feature_extractor." + full_name].abs() >= threshold_test)
+                # 旧 mask = (diff.abs() <= threshold)
+                core_mask = (diff.abs() <= threshold)
 
-                # print(f"Layer {full_name}: {mask.sum().item()} / {mask.numel()} parameters masked.")
-                masked_diff = diff[mask]
+                # ---------------- 新增 ------------
+                if full_name in self.hess_mask:  # 只有 feature_extractor.* 可有 mask
+                    core_mask &= self.hess_mask[full_name]  # 二阶低曲率 & 一阶低幅度
+                # ---------------- 结束新增 ---------
+
+                masked_diff = diff[core_mask]
+                # 后续保持不变：norm 裁剪、添加噪声、写回 diff[core_mask] = masked_diff
 
                 norm = torch.norm(diff)
-                # if norm > clip_value:
-                #     diff = diff / norm * clip_value
+                if norm > clip_value:
+                    diff = diff / norm * clip_value
 
 
                 # -- (b) 加噪 --
-                noise_std_estimate = 20*clip_value*torch.sqrt(
+                noise_std_estimate = 10*clip_value*torch.sqrt(
                     torch.tensor(2.0) * torch.log(torch.tensor(1.25 / delta)))/(len(trainloader)*epsilon)
                 noise = torch.normal(mean=0, std=noise_std_estimate, size=masked_diff.shape).to(diff.device)
                 masked_diff = masked_diff + noise
                 norm_masked_noisy = torch.norm(masked_diff.abs())
-                print(
-                    f"[{full_name}] noise_std={noise_std_estimate.item():.6f} | norm_noisy={norm_masked_noisy.item():.4f} vs norm_test={norm_test.item():.4f}")
+                # print(
+                #     f"[{full_name}] noise_std={noise_std_estimate.item():.6f} | norm_noisy={norm_masked_noisy.item():.4f} vs norm_test={norm_test.item():.4f}")
                 # 4) 写回原来的 diff
-                diff[mask] = masked_diff
+                diff[core_mask] = masked_diff
                 param_diff[full_name] = diff
 
                 # 记录噪声
                 self.noise[full_name] = torch.zeros_like(diff)
-                self.noise[full_name][mask] = noise
+                self.noise[full_name][core_mask] = noise
 
             for name, param in self.model.feature_extractor.named_parameters():
-                param.data = self.inital_pra_dp[name] + param_diff[name]
+                if name in param_diff:
+                    # 这里的 param_diff[name] 是经过裁剪和加噪的参数差异
+                    param.data = self.inital_pra_dp[name] + param_diff[name]
 
 
 
-        # for _ in range(self.local_steps):
-        #     self.pm_train = []
-        #     for i, (x, y) in enumerate(self.public_data_loader):
-        #         if type(x) == type([]):
-        #             x[0] = x[0].to(self.device)
-        #         else:
-        #             x = x.to(self.device)
-        #         y = y.to(self.device)
-        #         output = self.model(x)
-        #         loss = self.loss(output, y)
-        #         self.opt.zero_grad()
-        #         loss.backward()
-        #         self.opt.step()
+#二次修正
+            # for _ in range(self.local_steps):
+            #     self.pm_train = []
+            #     for i, (x, y) in enumerate(self.public_data_loader):
+            #         if type(x) == type([]):
+            #             x[0] = x[0].to(self.device)
+            #         else:
+            #             x = x.to(self.device)
+            #         y = y.to(self.device)
+            #         output = self.model(x)
+            #         loss = self.loss(output, y)
+            #         self.opt.zero_grad()
+            #         loss.backward()
+            #         self.opt.step()
 
         with torch.enable_grad():
             for i, (x, y) in enumerate(trainloader):
@@ -472,7 +509,7 @@ class clientCP:
                 f.write(str(record_dict) + "\n")
 
         # Save model at 100th round
-        if round == 500:
+        if round == 499:
             import os
             save_dir = "pretrain"
             os.makedirs(save_dir, exist_ok=True)  # Create folder if it doesn't exist
@@ -484,4 +521,19 @@ class clientCP:
 
 
 
+def hessian_diag_hutchinson(model, loss, params=None, num_samples=8):
+    if params is None:
+        params = [p for p in model.parameters() if p.requires_grad]
 
+    # 一阶梯度（需要保留计算图）
+    grads = torch.autograd.grad(loss, params, create_graph=True)
+
+    diag_est = [torch.zeros_like(p) for p in params]
+    for _ in range(num_samples):
+        vs = [torch.randint_like(p, 2, dtype=torch.float32) * 2 - 1   # Rademacher ±1
+              for p in params]
+        Hv = torch.autograd.grad(grads, params, grad_outputs=vs,
+                                 retain_graph=True)
+        for d, hv in zip(diag_est, Hv):
+            d += hv.pow(2)        # (Hv)⊙v，元素平方即可
+    return [d / num_samples for d in diag_est]

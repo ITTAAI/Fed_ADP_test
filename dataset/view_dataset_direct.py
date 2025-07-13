@@ -109,54 +109,51 @@ def plot_bubble_distribution(distribution_matrix,
     plt.show()
 
 
-#######################
-# 3) 主程序示例
-#######################
+
+# ─── add this helper ────────────────────────────────────────────────
+def get_data_count(dataset, client_id, is_train=True):
+    """
+    读取某个客户端的 train/test 数据，返回样本总数
+    """
+    data_dict = read_data(dataset, idx=client_id, is_train=is_train)
+    return len(data_dict['y'])
+
+
 if __name__ == "__main__":
-    dataset_name = "cifar-10-normal"  # 数据集名称
-    num_clients = 21      # 客户端数
-    num_classes = 10     # 示例: 这里演示200类(你的图看起来像200行),
-                          # 如果是CIFAR-10则 num_classes=10。
-                          # 或者你想绘制 200, 256 之类都行。
+    dataset_name = "cifar-10-shadow"
+    num_clients = 10
+    num_classes = 10
 
-    # 是否画 "验证集" 分布 (仅示意做标题区分)
-    is_validation = True
-    beta_val = 0.5
-
-    # 先创建一个 distribution_matrix (num_clients, num_classes)
-    distribution_matrix = np.zeros((num_clients, num_classes), dtype=int)
-
-    # 遍历每个客户端, 读取其标签分布
-    # 这里以 test 数据(= validation) 为例进行可视化
+    # —— TRAINING SET —— #
+    train_dist = np.zeros((num_clients, num_classes), dtype=int)
     for cid in range(num_clients):
-        dist_count = get_label_distribution(dataset_name,
-                                            client_id=cid,
-                                            num_classes=num_classes,
-                                            is_train=True)  # False -> test data
-        distribution_matrix[cid, :] = dist_count
+        train_dist[cid, :] = get_label_distribution(dataset_name, cid, num_classes, is_train=True)
 
-    # 调用气泡图函数
-    plot_bubble_distribution(distribution_matrix=distribution_matrix,
-                             num_clients=num_clients,
-                             num_classes=num_classes,
-                             title="Validation Set Distribution",
-                             is_validation=is_validation,
-                             beta=beta_val,
-                             color='red',   # 红色气泡
-                             alpha=0.6)
+    # total per‐client
+    train_counts = train_dist.sum(axis=1)
+    for cid, cnt in enumerate(train_counts):
+        print(f"[Train] Client {cid}: {cnt} samples")
+
+    plot_bubble_distribution(train_dist,
+                             num_clients, num_classes,
+                             title="Train Set Distribution",
+                             is_validation=False,
+                             beta=0.5,
+                             color='blue', alpha=0.6)
+
+    # —— TEST/VALIDATION SET —— #
+    test_dist = np.zeros((num_clients, num_classes), dtype=int)
     for cid in range(num_clients):
-        dist_count = get_label_distribution(dataset_name,
-                                            client_id=cid,
-                                            num_classes=num_classes,
-                                            is_train=False)  # False -> test data
-        distribution_matrix[cid, :] = dist_count
+        test_dist[cid, :] = get_label_distribution(dataset_name, cid, num_classes, is_train=False)
 
-    # 调用气泡图函数
-    plot_bubble_distribution(distribution_matrix=distribution_matrix,
-                             num_clients=num_clients,
-                             num_classes=num_classes,
-                             title="Validation Set Distribution",
-                             is_validation=is_validation,
-                             beta=beta_val,
-                             color='red',   # 红色气泡
-                             alpha=0.6)
+    # total per‐client
+    test_counts = test_dist.sum(axis=1)
+    for cid, cnt in enumerate(test_counts):
+        print(f"[Test]  Client {cid}: {cnt} samples")
+
+    plot_bubble_distribution(test_dist,
+                             num_clients, num_classes,
+                             title="Test Set Distribution",
+                             is_validation=True,
+                             beta=0.5,
+                             color='red', alpha=0.6)
