@@ -130,3 +130,5 @@ dmypy.json
 /dataset/
 /dataset/cifar-10-normal/test/
 /system/logs/
+/system/Membership_Inference_Attack/view_dp/
+/system/Membership_Inference_Attack/view/

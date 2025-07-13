@@ -32,7 +32,7 @@ class FedCP:
         self.times = times
         self.eval_gap = args.eval_gap
 
-
+        result_dir = "results"
         for i in range(self.num_clients):
             train_data = read_client_data(self.dataset, i, is_train=True)
             test_data = read_client_data(self.dataset, i, is_train=False)
@@ -41,6 +41,11 @@ class FedCP:
                             train_samples=len(train_data), 
                             test_samples=len(test_data))
             self.clients.append(client)
+            filename = f"results_{self.dataset}_{client.id}.txt"
+            file_path = os.path.join(result_dir, filename)
+            with open(file_path, "w") as f:
+                pass
+
 
         print(f"\nJoin ratio / total clients: {self.join_ratio} / {self.num_clients}")
         print("Finished creating server and clients.")
@@ -103,7 +108,22 @@ class FedCP:
 
         return ids, num_samples, tot_correct, tot_auc
     def test_metrics_after(self):
-
+        num_samples = []
+        tot_correct = []
+        tot_auc = []
+        print("after noise_acc")
+        result_dir = "results_after"
+        os.makedirs(result_dir, exist_ok=True)
+        for c in self.clients:
+            ct, ns, auc = c.test_metrics_before()
+            print(f'Client {c.id}: Acc: {ct * 1.0 / ns}, AUC: {auc}')
+            tot_correct.append(ct * 1.0)
+            tot_auc.append(auc * ns)
+            num_samples.append(ns)
+            filename = f"results_{self.dataset}_{c.id}.txt"
+            file_path = os.path.join(result_dir, filename)
+            with open(file_path, "a") as f:
+                f.write(f"Round {c.round}: ACC = {ct * 1.0 / ns:.4f}\n")
         for c in self.clients:
             c.test_metrics_after()
 
