@@ -32,9 +32,9 @@ class clientCP:
         self.loss = nn.CrossEntropyLoss()
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.learning_rate)
         self.round = 0
-        public_data_file="public_cifar10_data_iid_5percent/public_train.npz"
-        self.public_data_loader = DataLoader(read_npz_data(file_path=public_data_file), self.batch_size,
-                                      drop_last=True, shuffle=False)
+        # public_data_file="public_cifar10_data_iid_5percent/public_train.npz"
+        # self.public_data_loader = DataLoader(read_npz_data(file_path=public_data_file), self.batch_size,
+        #                               drop_last=True, shuffle=False)
         log_root = "logs"
         self.param_diff = {}
         self.inital_pra = {}
