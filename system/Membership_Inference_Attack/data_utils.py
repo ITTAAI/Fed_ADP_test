@@ -12,9 +12,9 @@ def read_data(is_train=True, is_shadow=True, num_clients=5,alpha=1):
     data_list = []
     for i in range(num_clients):
         if is_shadow:
-            file_name = f"{alpha}/{'cifar-10-shadow/train/train' if is_train else 'cifar-10-shadow/test/test'}{i}_.npz"
+            file_name = f"dataset/{alpha}/{'cifar-10-shadow/train/train' if is_train else 'cifar-10-shadow/test/test'}{i}_.npz"
         else:
-            file_name = f"{alpha}/{'cifar-10-normal/train/train' if is_train else 'cifar-10-normal/test/test'}{i}_.npz"
+            file_name = f"dataset/{alpha}/{'cifar-10-normal/train/train' if is_train else 'cifar-10-normal/test/test'}{i}_.npz"
         if not os.path.exists(file_name):
             raise FileNotFoundError(f"File {file_name} not found.")
         with open(file_name, 'rb') as f:
