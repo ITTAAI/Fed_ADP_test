@@ -17,6 +17,7 @@ class clientCP:
         self.model = copy.deepcopy(args.model)
         self.dataset = args.dataset
         self.device = args.device
+        self.alpha=args.alpha
         self.id = id
         self.dp = args.difference_privacy
         self.num_classes = args.num_classes
@@ -175,13 +176,13 @@ class clientCP:
     def load_train_data(self, batch_size=None):
         if batch_size == None:
             batch_size = self.batch_size
-        train_data = read_client_data(self.dataset, self.id, is_train=True)
+        train_data = read_client_data(self.dataset, self.id, is_train=True,alpha=self.alpha)
         return DataLoader(train_data, batch_size, drop_last=True, shuffle=False)
 
     def load_test_data(self, batch_size=None):
         if batch_size == None:
             batch_size = self.batch_size
-        test_data = read_client_data(self.dataset, self.id, is_train=False)
+        test_data = read_client_data(self.dataset, self.id, is_train=False,alpha=self.alpha)
         return DataLoader(test_data, batch_size, drop_last=True, shuffle=False)
 
     def set_parameters(self, feature_extractor):
@@ -543,14 +544,7 @@ class clientCP:
         self.get_module_gradient_norm(dataloader=trainloader, filename="train_after")
 
         # Save model at 100th round
-        if round == 999:
-            import os
-            save_dir = "pretrain"
-            os.makedirs(save_dir, exist_ok=True)  # Create folder if it doesn't exist
-            filename = f"results_{args.dataset}_client{self.id}_{args.global_rounds}_{args.local_learning_rate:.4f}.pt"
-            save_path = os.path.join(save_dir, filename)
-            torch.save(self.model.state_dict(), save_path)
-            print(f"Model saved to {save_path}")
+
 
 
 

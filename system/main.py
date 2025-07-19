@@ -105,7 +105,7 @@ if __name__ == "__main__":
                         help="Running times")
     parser.add_argument('-eg', "--eval_gap", type=int, default=1,
                         help="Rounds gap for evaluation")
-   
+    parser.add_argument('-al', "--alpha", type=float, default=1)
     parser.add_argument('-lam', "--lamda", type=float, default=0.0)
 
     args = parser.parse_args()

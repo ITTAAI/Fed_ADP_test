@@ -16,6 +16,7 @@ class FedCP:
         self.global_modules = copy.deepcopy(args.model)
         self.num_clients = args.num_clients
         self.join_ratio = args.join_ratio
+        self.alpha = args.alpha
         self.random_join_ratio = args.random_join_ratio
         self.join_clients = int(self.num_clients * self.join_ratio)
 
@@ -34,8 +35,8 @@ class FedCP:
 
         result_dir = "results"
         for i in range(self.num_clients):
-            train_data = read_client_data(self.dataset, i, is_train=True)
-            test_data = read_client_data(self.dataset, i, is_train=False)
+            train_data = read_client_data(self.dataset, i, is_train=True,alpha=self.alpha)
+            test_data = read_client_data(self.dataset, i, is_train=False,alpha=self.alpha)
             client = clientCP(args, 
                             id=i, 
                             train_samples=len(train_data), 
@@ -178,7 +179,7 @@ class FedCP:
 
             self.Budget.append(time.time() - s_t)
             print('-'*50, self.Budget[-1])
-
+        self.save_models(args)
         print("\nBest accuracy.")
         print(max(self.rs_test_acc))
         print(sum(self.Budget[1:])/len(self.Budget[1:]))
@@ -199,11 +200,20 @@ class FedCP:
             self.uploaded_ids.append(client.id)
             self.uploaded_models.append(client.model)
 
-    def train_global(self):
-        globel_client=clientCP(args,
-                            id=20,
-                            train_samples=len(train_data),
-                            test_samples=len(test_data))
+    def save_models(self, args):
+        save_dir = f"pretrain/{args.dataset}/{args.alpha:.2f}"
+        os.makedirs(save_dir, exist_ok=True)  # Create folder if it doesn't exist
+
+        for c in self.clients:
+            filename = f"results_client{c.id}_{args.global_rounds}.pt"
+            save_path = os.path.join(save_dir, filename)
+            torch.save(c.model.state_dict(), save_path)
+            print(f"Model saved to {save_path}")
+
+        filename = f"results_client{self.num_clients}_{args.global_rounds}.pt"
+        save_path = os.path.join(save_dir, filename)
+        torch.save(self.global_modules.state_dict(), save_path)
+        print(f"Model saved to {save_path}")
 
 
 
