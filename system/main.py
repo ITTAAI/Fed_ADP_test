@@ -79,6 +79,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # general
     parser.add_argument('-dp', '--difference_privacy', type=bool, default=False)
+    parser.add_argument('-dpn', '--difference_privacy_number', type=float, default=5)
     parser.add_argument('-dpl', '--difference_privacy_layer', type=str, default="model.head")
     parser.add_argument('-dev', "--device", type=str, default="cuda",
                         choices=["cpu", "cuda"])
@@ -110,8 +111,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print("dp", args.difference_privacy)
     os.environ["CUDA_VISIBLE_DEVICES"] = args.device_id
+    print("dp_number",args.difference_privacy_number)
     # torch.cuda.set_device(int(args.device_id))
-
     if args.device == "cuda" and not torch.cuda.is_available():
         print("\ncuda is not avaiable.\n")
         args.device = "cpu"

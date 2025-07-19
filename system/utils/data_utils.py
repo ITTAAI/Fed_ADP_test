@@ -22,7 +22,14 @@ def read_data(dataset, idx, is_train=True):
 
         return test_data
 
+def read_npz_data(file_path):
+    """直接读取指定路径的 .npz 文件，返回 (x, y) 对列表"""
+    with open(file_path, 'rb') as f:
+        data = np.load(f, allow_pickle=True)['data'].tolist()
 
+    X = torch.tensor(data['x'], dtype=torch.float32)
+    y = torch.tensor(data['y'], dtype=torch.int64)
+    return list(zip(X, y))
 def read_client_data(dataset, idx, is_train=True):
     if "News" in dataset:
         return read_client_data_text(dataset, idx, is_train)

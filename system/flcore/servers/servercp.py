@@ -93,7 +93,7 @@ class FedCP:
         os.makedirs(result_dir, exist_ok=True)
         for c in self.clients:
             ct, ns, auc = c.test_metrics_before()
-            print(f'Client {c.id}: Acc: {ct*1.0/ns}, AUC: {auc}')
+            # print(f'Client {c.id}: Acc: {ct*1.0/ns}, AUC: {auc}')
             tot_correct.append(ct*1.0)
             tot_auc.append(auc*ns)
             num_samples.append(ns)
@@ -116,7 +116,7 @@ class FedCP:
         os.makedirs(result_dir, exist_ok=True)
         for c in self.clients:
             ct, ns, auc = c.test_metrics_before()
-            print(f'Client {c.id}: Acc: {ct * 1.0 / ns}, AUC: {auc}')
+            # print(f'Client {c.id}: Acc: {ct * 1.0 / ns}, AUC: {auc}')
             tot_correct.append(ct * 1.0)
             tot_auc.append(auc * ns)
             num_samples.append(ns)

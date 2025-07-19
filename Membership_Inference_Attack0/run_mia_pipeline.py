@@ -13,7 +13,7 @@ BATCH_SIZE = 1
 EPOCHS = 100
 LR = 1e-3
 NUM_CLASSES = 10
-NUM_CLIENTS = 20
+NUM_CLIENTS = 10
 
 # 构建目标模型结构（全复制）
 def get_fresh_model():
@@ -24,7 +24,7 @@ def get_fresh_model():
 
 # 构造 shadow 模型文件名
 shadow_client_files = [
-    f"shadow_model/results_cifar-10-shadow_client{i}_600_0.0050.pt"
+    f"shadow_model/results_cifar-10-shadow_client{i}_1000_0.0050.pt"
     for i in range(NUM_CLIENTS)
 ]
 
@@ -32,7 +32,7 @@ shadow_client_files = [
 
 
 #
-# # Step 1: 一次性训练所有攻击模型
+# Step 1: 一次性训练所有攻击模型
 # for target_label in range(NUM_CLASSES):
 #     print(f"==== Training Attack Model for Label: {target_label} ====")
 #     shadow_model = get_fresh_model()
@@ -51,7 +51,7 @@ shadow_client_files = [
 target_model_names = [""]
 target_client_files = {
     name: [
-        f"dp_model/dp4/results_cifar-10-normal_client{i}_600_0.0050{name}.pt"
+        f"dp_model/results_cifar-10-dp_client{i}_1000_0.0050{name}.pt"
         for i in range(NUM_CLIENTS)
     ] for name in target_model_names
 }

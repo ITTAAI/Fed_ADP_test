@@ -11,7 +11,7 @@ CIFAR10_MEAN = (0.4914, 0.4822, 0.4465)
 CIFAR10_STD = (0.2470, 0.2435, 0.2616)
 
 # 设置 Dirichlet 分布的 alpha 值
-alpha = 0.5
+alpha = 10
 # 正常训练的客户端数量
 num_clients_normal = 10
 # 影子（用于成员攻击）训练的客户端数量
@@ -324,8 +324,8 @@ if __name__ == "__main__":
     # ------------------------------------------------
     # Shadow augmentation: add 10% of *original* CIFAR-10 data (this will overlap with public data)
     # ------------------------------------------------
-    ten_percent_train_orig = int(train_size_orig * 0.10)
-    ten_percent_test_orig = int(test_size_orig * 0.10)
+    ten_percent_train_orig = int(train_size_orig * 0.25)
+    ten_percent_test_orig = int(test_size_orig * 0.25)
 
     real_subset_train_data_orig = original_train_data[:ten_percent_train_orig]
     real_subset_train_labels_orig = original_train_labels[:ten_percent_train_orig]
