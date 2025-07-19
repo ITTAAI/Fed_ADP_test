@@ -215,58 +215,90 @@ def plot_attack_results_per_client(results_by_part, part_names,
             fig.savefig(out, dpi=200)
             plt.close(fig)
 
-def plot_attack_results_avg_per_client(results_by_part, part_names):
+def plot_attack_results_last_vs_avg(results_by_part, part_names):
     """
-    Plot average per-label metrics across clients, per part.
+    For each part:
+       • Figure 1: average of all clients except the last one
+       • Figure 2: metrics of the last client alone
 
-    results_by_part: list (part) -> list (client) -> list (label) -> dict
-    Each dict contains:
-        - 'train_acc'
-        - 'holdout_acc'
-        - 'attack_acc'
-        - 'TPS_acc'
-        - 'FPS_error'
+    Parameters
+    ----------
+    results_by_part : list(part) -> list(client) -> list(label) -> dict
+    part_names      : list(str)
     """
+    import numpy as np
     import matplotlib.pyplot as plt
 
-    for part_idx, (part_results, part_name) in enumerate(zip(results_by_part, part_names)):
+    for part_results, part_name in zip(results_by_part, part_names):
         num_clients = len(part_results)
-        num_labels = len(part_results[0])
+        num_labels  = len(part_results[0])
 
-        # Accumulate values
-        train_vals_all  = np.zeros(num_labels)
-        attack_vals_all = np.zeros(num_labels)
-        tps_vals_all    = np.zeros(num_labels)
-        fps_vals_all    = np.zeros(num_labels)
+        if num_clients == 0:
+            print(f"[WARN] '{part_name}' 无客户端数据，跳过。")
+            continue
+        if num_clients == 1:
+            print(f"[WARN] '{part_name}' 只有 1 个客户端，Avg-Others 图将省略。")
 
-        for client_results in part_results:
-            for label_idx, metrics in enumerate(client_results):
-                train_vals_all[label_idx]  += metrics['train_acc']
-                attack_vals_all[label_idx] += metrics['attack_acc']
-                tps_vals_all[label_idx]    += metrics['TPS_acc']
-                fps_vals_all[label_idx]    += metrics['FPS_error']
+        # ---------- 1) 计算“其余客户端平均” ----------
+        if num_clients > 1:
+            # 累积
+            train_sum  = np.zeros(num_labels)
+            attack_sum = np.zeros(num_labels)
+            tps_sum    = np.zeros(num_labels)
+            fps_sum    = np.zeros(num_labels)
 
-        # Compute averages
-        train_avg  = train_vals_all  / num_clients
-        attack_avg = attack_vals_all / num_clients
-        tps_avg    = tps_vals_all    / num_clients
-        fps_avg    = fps_vals_all    / num_clients
+            for client_metrics in part_results[:-1]:          # 不含最后一个
+                for lbl, m in enumerate(client_metrics):
+                    train_sum[lbl]  += m['train_acc']
+                    attack_sum[lbl] += m['attack_acc']
+                    tps_sum[lbl]    += m['TPS_acc']
+                    fps_sum[lbl]    += m['FPS_error']
+
+            denom = num_clients - 1
+            train_avg  = train_sum  / denom
+            attack_avg = attack_sum / denom
+            tps_avg    = tps_sum    / denom
+            fps_avg    = fps_sum    / denom
+
+            # 画 Avg-Others 图
+            labels_x = list(range(num_labels))
+            fig1, ax1 = plt.subplots(figsize=(6, 4))
+            ax1.plot(labels_x, train_avg,  marker='d', linestyle=':',  label='Avg Train Acc')
+            ax1.plot(labels_x, attack_avg, marker='o', linestyle='-',  label='Avg Attack Acc')
+            ax1.plot(labels_x, tps_avg,    marker='s', linestyle='--', label='Avg TPS Acc')
+            ax1.plot(labels_x, fps_avg,    marker='^', linestyle='-.', label='Avg FPS Error')
+
+            ax1.set_xticks(labels_x)
+            ax1.set_xlabel("Target Label")
+            ax1.set_ylim(0, 1.05)
+            ax1.set_ylabel("Accuracy / Error")
+            ax1.set_title(f"{part_name} | Avg Across Clients (except last)")
+            ax1.grid(True)
+            ax1.legend(loc='best')
+            fig1.tight_layout()
+
+        # ---------- 2) 计算“最后一个客户端” ----------
+        last_client = part_results[-1]
+        last_train  = np.array([m['train_acc']  for m in last_client])
+        last_attack = np.array([m['attack_acc'] for m in last_client])
+        last_tps    = np.array([m['TPS_acc']    for m in last_client])
+        last_fps    = np.array([m['FPS_error']  for m in last_client])
 
         labels_x = list(range(num_labels))
+        fig2, ax2 = plt.subplots(figsize=(6, 4))
+        ax2.plot(labels_x, last_train,  marker='d', linestyle=':',  label='Train Acc')
+        ax2.plot(labels_x, last_attack, marker='o', linestyle='-',  label='Attack Acc')
+        ax2.plot(labels_x, last_tps,    marker='s', linestyle='--', label='TPS Acc')
+        ax2.plot(labels_x, last_fps,    marker='^', linestyle='-.', label='FPS Error')
 
-        # Plot
-        fig, ax = plt.subplots(figsize=(6, 4))
-        ax.plot(labels_x, train_avg,  marker='d', linestyle=':',  label='Avg Train Acc')
-        ax.plot(labels_x, attack_avg, marker='o', linestyle='-',  label='Avg Attack Acc')
-        ax.plot(labels_x, tps_avg,    marker='s', linestyle='--', label='Avg TPS Acc')
-        ax.plot(labels_x, fps_avg,    marker='^', linestyle='-.', label='Avg FPS Error')
+        ax2.set_xticks(labels_x)
+        ax2.set_xlabel("Target Label")
+        ax2.set_ylim(0, 1.05)
+        ax2.set_ylabel("Accuracy / Error")
+        ax2.set_title(f"{part_name} | Last Client (index {num_clients-1})")
+        ax2.grid(True)
+        ax2.legend(loc='best')
+        fig2.tight_layout()
 
-        ax.set_xticks(labels_x)
-        ax.set_xlabel("Target Label")
-        ax.set_ylim(0, 1.05)
-        ax.set_ylabel("Accuracy / Error")
-        ax.set_title(f"{part_name}  |  Avg Across Clients")
-        ax.grid(True)
-        ax.legend(loc='best')
-        fig.tight_layout()
+        # ---------- 显示 ----------
         plt.show()
