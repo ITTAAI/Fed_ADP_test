@@ -7,7 +7,7 @@ if __name__ == "__main__":
     import torch
     import copy
     from model import FedAvgCNN, LocalModel
-    from whitebox_mia_pipeline import  whitebox_membership_inference_attack_pipeline, plot_attack_results_per_client,plot_attack_results_avg_per_client
+    from whitebox_mia_pipeline import  whitebox_membership_inference_attack_pipeline, plot_attack_results_last_vs_avg
     from train_attack_model import train_attack_model
     from evaluate_client_accuracy import evaluate_all_clients_accuracy
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -117,4 +117,4 @@ if __name__ == "__main__":
 
 
     # plot_attack_results_per_client(all_results_by_part, target_model_names)
-    plot_attack_results_avg_per_client(all_results_by_part, target_model_names)
+    plot_attack_results_last_vs_avg(all_results_by_part, target_model_names)
